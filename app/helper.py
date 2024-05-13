@@ -7,16 +7,14 @@ from fastapi.responses import JSONResponse
 
 logger = logging.getLogger(__name__)
 
-P = ParamSpec("P")
 
-
-def elapsed_time(
-    func: Callable[..., Awaitable[List]]
-) -> Callable[..., Awaitable[JSONResponse]]:
+def elapsed_time[**P](
+    func: Callable[P, Awaitable[List]]
+) -> Callable[P, Awaitable[JSONResponse]]:
     """Decorator to calculate the elapsed time of the function"""
 
     @wraps(func)
-    async def wrapper(*args, **kwargs):
+    async def wrapper(*args: P.args, **kwargs: P.kwargs) -> JSONResponse:
         start = time()
         result = await func(*args, **kwargs)
         end = time()
