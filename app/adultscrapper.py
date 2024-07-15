@@ -1,41 +1,10 @@
-from time import time
-from functools import wraps
 import random
 from datetime import datetime
-from typing import Generator, Dict, Set, List
-import logging
-
-from fastapi import FastAPI
-from fastapi.responses import JSONResponse
+from typing import Dict, Generator, List, Set
 
 import httpx
 from aiocache import cached
 from selectolax.parser import HTMLParser
-
-app = FastAPI()
-logger = logging.getLogger(__name__)
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(levelname)s: %(message)s",
-    handlers=[logging.StreamHandler()],
-)
-logging.getLogger("httpx").setLevel(logging.WARNING)
-
-
-def elapsed_time(func):
-    @wraps(func)
-    async def wrapper(*args, **kwargs):
-        start = time()
-        result = await func(*args, **kwargs)
-        end = time()
-        total_time = end - start
-        logger.info(
-            f"Function {func.__name__}{args} {kwargs} Took {total_time:.4f} seconds"
-        )
-        alter_res = {"data": result, "elapsed_time": total_time}
-        return JSONResponse(alter_res, 200)
-
-    return wrapper
 
 
 class AdultScrapper:
@@ -43,7 +12,7 @@ class AdultScrapper:
     Scraps Adult Content from Xnxx and Xvideos
     """
 
-    def __init__(self, base_url: str, session: httpx.AsyncClient):
+    def __init__(self, base_url: str, session: httpx.AsyncClient) -> None:
         self.session = session
         self.base_url = base_url
 
@@ -111,48 +80,22 @@ class AdultScrapper:
         links = await self.get_link(search=search, amount=amount, xvideos=xvideos)
         return [await self.extract_videos(url=link) for link in links]
 
+    async def get_redtube_video(self, amount: int, search: str) -> List:
+        """
+        Get Redtube Video
 
-def format_video_payload(video):
-    return {
-        "name": video.get("name", "").strip(),
-        "description": video.get("description", "").strip(),
-        "upload_date": video.get("upload_date"),
-        "thumbnail": video.get("thumbnail"),
-        "content_url": video.get("content_url"),
-    }
-
-
-@app.get("/xnxx/{amount}/{search}")
-@elapsed_time
-async def xnxx(amount: int, search: str):
-    xnxx = AdultScrapper(base_url="https://www.xnxx.com", session=httpx.AsyncClient())
-    links = await xnxx.send_video(search, amount)
-    return [format_video_payload(vid) for vid in links]
-
-
-@app.get("/xvideos/{amount}/{search}")
-@elapsed_time
-async def xvideos(amount: int, search: str):
-    xvideos = AdultScrapper(
-        base_url="https://www.xvideos.com", session=httpx.AsyncClient()
-    )
-    links = await xvideos.send_video(search, amount, True)
-    return [format_video_payload(vid) for vid in links]
-
-
-@app.get("/suggestion/xvideos/{search}")
-@elapsed_time
-@cached(ttl=60 * 60 * 1)
-async def xvideos_suggestion(search: str):
-    async with httpx.AsyncClient() as client:
-        data = await client.get(f"https://www.xvideos.com/search-suggest/{search}")
-        return [keywords.get("N") for keywords in data.json().get("keywords", [])]
-
-
-@app.get("/suggestion/xnxx/{search}")
-@elapsed_time
-@cached(ttl=60 * 60 * 1)
-async def xnxx_suggestion(search: str):
-    async with httpx.AsyncClient() as client:
-        data = await client.get(f"https://www.xnxx.com/search-suggest/{search}")
-        return [keywords.get("N") for keywords in data.json().get("keywords", [])]
+        Parameters
+        ----------
+        amount: How much?
+        search: What to search?
+        """
+        resp = await self.session.get(
+            "https://api.redtube.com/?"
+            "data=redtube.Videos.searchVideos&"
+            f"output=json&search={search}&"
+            "thumbsize=all&page=1&sort=new"
+        )
+        data = resp.json()
+        if not data.get("videos"):
+            return []
+        return random.choices(data["videos"], k=amount)
